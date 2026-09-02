@@ -5,8 +5,8 @@
     "officialPage": "https://www.playstation.com/ja-jp/ps5/buy-now/ps5-pro/"
   },
   "defaults": {
-    "timeoutMs": 30000,
-    "retries": 2,
+    "timeoutMs": 20000,
+    "retries": 1,
     "minTextLength": 300,
     "blockedPatterns": [
       "Enter the characters you see below",
@@ -157,10 +157,11 @@
         "お取り寄せ"
       ],
       "verified": false,
-      "note": "Actions では HTTP/2 で応答が壊れる。HTTP/2 を無効化。ただし遮断元は Akamai (errors.edgesuite.net) で IP 起因の可能性が高い",
+      "note": "Actions では HTTP/2 応答が壊れる or タイムアウト。遮断元は Akamai。長く待たせないよう timeout を短く retries 0 にしている",
       "enabled": true,
-      "disableHttp2": true,
-      "warmupUrl": "https://www.biccamera.com/"
+      "warmupUrl": "https://www.biccamera.com/",
+      "timeoutMs": 12000,
+      "retries": 0
     },
     {
       "id": "joshin",

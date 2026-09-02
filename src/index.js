@@ -6,6 +6,7 @@ import { fetchHttp, BrowserPool } from './fetcher.js';
 import { detect } from './detect.js';
 import { loadState, saveState } from './state.js';
 import { notifyStock, notifyErrors, notifyTest } from './discord.js';
+import { probeTargets, renderProbeTable } from './probe.js';
 import { computeTransitions } from './transitions.js';
 import { IN_STOCK, OUT_OF_STOCK, UNKNOWN, ERROR, LABEL, EMOJI } from './status.js';
 
@@ -20,6 +21,9 @@ const { values: argv } = parseArgs({
     'no-state': { type: 'boolean', default: false },
     'test-notify': { type: 'boolean', default: false },
     'dump-dir': { type: 'string' },
+    probe: { type: 'boolean', default: false },
+    'probe-repeat': { type: 'string', default: '3' },
+    'budget-ms': { type: 'string', default: process.env.BUDGET_MS ?? '300000' },
     concurrency: { type: 'string', default: process.env.CONCURRENCY ?? '3' },
     help: { type: 'boolean', default: false },
   },
@@ -37,6 +41,9 @@ if (argv.help) {
   --no-state            前回状態を読まず・書かない（在庫ありなら必ず通知される）
   --test-notify         在庫を見ずに Discord へ疎通テストだけ送って終了
   --dump-dir <path>     取得した HTML と抽出テキストを保存する（判定を直すとき用）
+  --probe               取得方法ごとの成否を実測する（通知しない）
+  --probe-repeat <n>    --probe の試行回数 (default: 3)
+  --budget-ms <ms>      全体の時間予算。超えた分は打ち切る (default: 300000)
   --concurrency <n>     並列数 (default: 3)
 
 環境変数:
@@ -81,8 +88,11 @@ async function dump(dir, target, { html, text, note }) {
   if (note) await writeFile(join(dir, `${target.id}.note.txt`), note);
 }
 
-async function checkTarget(target, browser, dumpDir) {
+async function checkTarget(target, browser, dumpDir, deadline) {
   const base = { id: target.id, name: target.name, url: target.url, verified: target.verified };
+  if (Date.now() > deadline) {
+    return { ...base, status: ERROR, reason: '時間予算切れのため未実行', httpStatus: null, price: null };
+  }
   try {
     const { html, status } = target.mode === 'browser' ? await browser.fetch(target) : await fetchHttp(target);
     const { status: stockStatus, reason, text } = detect(target, html);
@@ -130,7 +140,7 @@ async function main() {
   });
 
   if (targets.length === 0) throw new Error('クロール対象が 0 件です');
-  if (!DRY_RUN && !WEBHOOK) {
+  if (!DRY_RUN && !argv.probe && !WEBHOOK) {
     throw new Error('DISCORD_WEBHOOK_URL が未設定です（通知しない場合は --dry-run を使ってください）');
   }
 
@@ -139,13 +149,31 @@ async function main() {
 
   console.log(`${productName} の在庫チェックを開始 (${targets.length} 店舗 / 並列 ${CONCURRENCY})`);
 
+  // 1 店舗のハングでジョブ全体が制限時間に達し、通知まで到達しないのを防ぐ。
+  // 実際に、ビックカメラの 30 秒タイムアウト x 3 回でジョブがキャンセルされた。
+  const deadline = Date.now() + Number(argv['budget-ms']);
+
+  if (argv.probe) {
+    console.log('取得方法ごとの成否を実測します（通知はしません）');
+    const rows = await probeTargets(targets, { repeat: Number(argv['probe-repeat']) });
+    const table = renderProbeTable(rows);
+    console.log('\n' + table.join('\n'));
+    await writeStepSummary(table);
+    if (argv['dump-dir']) {
+      await mkdir(argv['dump-dir'], { recursive: true });
+      await writeFile(join(argv['dump-dir'], 'probe.json'), JSON.stringify(rows, null, 2));
+      await writeFile(join(argv['dump-dir'], 'probe.md'), table.join('\n') + '\n');
+    }
+    return;
+  }
+
   const needsBrowser = targets.some((t) => t.mode === 'browser');
   const browser = needsBrowser ? new BrowserPool() : null;
 
   let results;
   try {
     results = await pool(targets, CONCURRENCY, async (t) => {
-      const r = await checkTarget(t, browser, argv['dump-dir']);
+      const r = await checkTarget(t, browser, argv['dump-dir'], deadline);
       console.log(`${EMOJI[r.status]} ${r.name.padEnd(22)} ${LABEL[r.status]} — ${r.reason}`);
       return r;
     });

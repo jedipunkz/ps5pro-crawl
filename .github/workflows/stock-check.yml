@@ -18,6 +18,7 @@ on:
           - force-notify  # 前回状態を無視。在庫ありならその場で必ず通知する
           - test-notify   # 在庫を見ず、Discord に疎通テストだけ送る
           - diagnose      # 通知せず、取得した HTML をアーティファクトに保存する
+          - probe         # どの取得方法なら通るのかを Runner の IP から実測する
       only:
         description: '対象を絞る (例: sony-store,rakuten-books)。空なら全店舗'
         type: string
@@ -39,7 +40,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: ${{ (inputs.mode == 'probe' && 30) || 15 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -64,6 +65,7 @@ jobs:
           case "$MODE" in
             dry-run)     args="--dry-run" ;;
             diagnose)    args="--dry-run --no-state --dump-dir dump" ;;
+            probe)       args="--probe --probe-repeat 3 --dump-dir dump" ;;
             force-notify) args="--no-state" ;;
             test-notify) args="--test-notify" ;;
             normal)      args="" ;;
@@ -100,7 +102,7 @@ jobs:
       # 前回の在庫状態を持ち回す。これが無いと毎回通知が飛ぶ。
       # cache は 7 日で失効するが、失われても重複通知が 1 回出るだけで復旧する。
       - name: 前回の状態を復元
-        if: inputs.mode != 'test-notify' && inputs.mode != 'diagnose'
+        if: inputs.mode != 'test-notify' && inputs.mode != 'diagnose' && inputs.mode != 'probe'
         uses: actions/cache/restore@v4
         with:
           path: .state
@@ -122,7 +124,7 @@ jobs:
       # 手動実行の副作用で次回の定期実行の判定を狂わせないため。
       # 取得した HTML を持ち帰る。ローカルから見えない店舗の判定を直す唯一の手段。
       - name: 取得結果をアーティファクトに保存
-        if: always() && inputs.mode == 'diagnose'
+        if: always() && (inputs.mode == 'diagnose' || inputs.mode == 'probe')
         uses: actions/upload-artifact@v4
         with:
           name: crawl-dump-${{ github.run_id }}
@@ -131,7 +133,7 @@ jobs:
           if-no-files-found: warn
 
       - name: 状態を保存
-        if: always() && inputs.mode != 'force-notify' && inputs.mode != 'test-notify' && inputs.mode != 'diagnose'
+        if: always() && inputs.mode != 'force-notify' && inputs.mode != 'test-notify' && inputs.mode != 'diagnose' && inputs.mode != 'probe'
         uses: actions/cache/save@v4
         with:
           path: .state
