@@ -18,6 +18,7 @@ const { values: argv } = parseArgs({
     'dry-run': { type: 'boolean', default: false },
     'http-only': { type: 'boolean', default: false },
     'include-disabled': { type: 'boolean', default: false },
+    'include-blocked': { type: 'boolean', default: process.env.INCLUDE_BLOCKED === 'true' },
     'no-state': { type: 'boolean', default: false },
     'test-notify': { type: 'boolean', default: false },
     'dump-dir': { type: 'string' },
@@ -36,7 +37,8 @@ if (argv.help) {
   --state <path>        状態ファイル (default: .state/state.json)
   --only <id,id>        指定 id だけをクロール
   --http-only           http モードのターゲットのみ（Chromium 不要）
-  --include-disabled    enabled:false のターゲットも対象にする
+  --include-disabled    enabled:false のターゲットをすべて対象にする
+  --include-blocked     回線起因で無効にした店舗を戻す（自宅回線のランナー向け）
   --dry-run             Discord に通知せず結果を標準出力するだけ
   --no-state            前回状態を読まず・書かない（在庫ありなら必ず通知される）
   --test-notify         在庫を見ずに Discord へ疎通テストだけ送って終了
@@ -52,6 +54,8 @@ if (argv.help) {
   NOTIFY_ON_ERROR       true で連続取得失敗も通知する
   ERROR_THRESHOLD       連続失敗の通知しきい値 (default: 3)
   NOTIFY_ON_SOLD_OUT    false で「在庫あり→在庫なし」通知を止める (default: true)
+  INCLUDE_BLOCKED       true で回線起因で無効にした店舗を戻す（セルフホストランナー向け）
+  BUDGET_MS             全体の時間予算 (default: 300000)
 `);
   process.exit(0);
 }
@@ -137,6 +141,7 @@ async function main() {
     only: argv.only?.split(',').map((s) => s.trim()).filter(Boolean),
     httpOnly: argv['http-only'],
     includeDisabled: argv['include-disabled'],
+    includeBlocked: argv['include-blocked'],
   });
 
   if (targets.length === 0) throw new Error('クロール対象が 0 件です');

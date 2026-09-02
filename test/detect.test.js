@@ -58,3 +58,16 @@ test('セレクタが一致しないページは UNKNOWN になる（サイト�
   assert.equal(r.status, 'UNKNOWN');
   assert.match(r.reason, /セレクタ/);
 });
+
+test('--include-blocked は回線起因の店舗だけを戻す（終了したサービスは戻さない）', async () => {
+  const { selectTargets } = await import('../src/config.js');
+  const opts = { only: null, httpOnly: false, includeDisabled: false };
+
+  const normal = selectTargets(config.targets, opts).map((t) => t.id);
+  const withBlocked = selectTargets(config.targets, { ...opts, includeBlocked: true }).map((t) => t.id);
+
+  assert.ok(withBlocked.length > normal.length, '回線起因の店舗が戻っていません');
+  assert.ok(withBlocked.includes('yodobashi'), 'ヨドバシは回線起因なので戻るべき');
+  assert.ok(!withBlocked.includes('tsutaya'), 'サービス終了した TSUTAYA は戻してはいけない');
+  assert.ok(!withBlocked.includes('sevennet'), 'リンク切れの 7net は戻してはいけない');
+});

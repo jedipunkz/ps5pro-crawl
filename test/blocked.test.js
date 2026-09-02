@@ -50,3 +50,13 @@ test('サービス終了ページを在庫ありと判定しない', async () =>
   const r = detect(target, html);
   assert.notEqual(r.status, IN_STOCK, r.reason);
 });
+
+test('無効化の理由が回線起因と恒久的で区別されている', () => {
+  const disabled = config.targets.filter((t) => !t.enabled);
+  for (const t of disabled) {
+    assert.ok(
+      ['datacenter-blocked', 'permanent'].includes(t.disabledReason),
+      `${t.id} に disabledReason がありません`,
+    );
+  }
+});

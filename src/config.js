@@ -37,6 +37,7 @@ export async function loadConfig(path) {
       enabled: true,
       verified: false,
       note: null,
+      disabledReason: null,
       warmupUrl: null,
       waitForSelector: null,
       settleMs: null,
@@ -52,10 +53,21 @@ export async function loadConfig(path) {
   return { product: raw.product ?? {}, defaults, targets };
 }
 
-/** CLI オプションでクロール対象を絞り込む */
-export function selectTargets(targets, { only, httpOnly, includeDisabled }) {
+/**
+ * CLI オプションでクロール対象を絞り込む。
+ *
+ * enabled: false の理由は 2 種類あり、区別して扱う。
+ * - datacenter-blocked … データセンター IP だから弾かれているだけ。
+ *   自宅回線のセルフホストランナーなら取得できるので --include-blocked で戻せる。
+ * - permanent … サービス終了やリンク切れ。どの回線から見ても無駄なので戻さない。
+ */
+export function selectTargets(targets, { only, httpOnly, includeDisabled, includeBlocked }) {
   let list = targets;
-  if (!includeDisabled) list = list.filter((t) => t.enabled);
+  if (!includeDisabled) {
+    list = list.filter(
+      (t) => t.enabled || (includeBlocked && t.disabledReason === 'datacenter-blocked'),
+    );
+  }
   if (httpOnly) list = list.filter((t) => t.mode === 'http');
   if (only?.length) {
     const want = new Set(only);

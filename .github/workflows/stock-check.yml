@@ -117,6 +117,10 @@ jobs:
           NOTIFY_ON_ERROR: ${{ vars.NOTIFY_ON_ERROR }}
           NOTIFY_ON_SOLD_OUT: ${{ vars.NOTIFY_ON_SOLD_OUT }}
           ERROR_THRESHOLD: ${{ vars.ERROR_THRESHOLD }}
+          # セルフホストランナーなど、データセンター IP でない回線に移したとき
+          # 遮断で無効にした店舗を config を書き換えずに戻すためのスイッチ
+          INCLUDE_BLOCKED: ${{ vars.INCLUDE_BLOCKED }}
+          BUDGET_MS: ${{ vars.BUDGET_MS }}
           ARGS: ${{ steps.opts.outputs.args }}
         run: node src/index.js $ARGS
 

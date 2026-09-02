@@ -44,7 +44,8 @@
         "購入手続き"
       ],
       "verified": true,
-      "enabled": true
+      "enabled": true,
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全方式 3/3 成功。http で十分"
     },
     {
       "id": "rakuten-books",
@@ -66,7 +67,8 @@
         "24時間以内に発送"
       ],
       "verified": true,
-      "enabled": true
+      "enabled": true,
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): http 3/3 成功。browser(mobile) は空ページが返るので使わない"
     },
     {
       "id": "yodobashi",
@@ -88,9 +90,10 @@
         "ご注文いただけます"
       ],
       "verified": true,
-      "enabled": true,
-      "note": "Actions の IP では 403。ローカル/自宅回線からは HTTP/2 で取得できることを確認済み",
-      "warmupUrl": "https://www.yodobashi.com/"
+      "enabled": false,
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全6方式 0/3 (403, 406バイトの遮断ページ)。セルフホストランナーなど別回線なら取得できる可能性がある",
+      "warmupUrl": "https://www.yodobashi.com/",
+      "disabledReason": "datacenter-blocked"
     },
     {
       "id": "nojima",
@@ -112,9 +115,10 @@
         "お取り寄せ"
       ],
       "verified": true,
-      "enabled": true,
-      "note": "Actions の IP では 403。ローカル/自宅回線からは HTTP/2 で取得できることを確認済み",
-      "warmupUrl": "https://online.nojima.co.jp/"
+      "enabled": false,
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全6方式 0/3 (403, 415バイトの遮断ページ)。セルフホストランナーなど別回線なら取得できる可能性がある",
+      "warmupUrl": "https://online.nojima.co.jp/",
+      "disabledReason": "datacenter-blocked"
     },
     {
       "id": "amazon",
@@ -134,8 +138,9 @@
         "一時的に在庫切れ；入荷時期は未定"
       ],
       "verified": false,
-      "note": "Actions の IP ではブロックページ(本文 99 文字)が返る。在庫欄も非同期描画",
-      "enabled": true
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全6方式で HTTP 200 だが本文 3.7KB のソフトブロック。実ページは 2MB 前後なので中身は無い。セルフホストランナーなど別回線なら取得できる可能性がある",
+      "enabled": false,
+      "disabledReason": "datacenter-blocked"
     },
     {
       "id": "biccamera",
@@ -157,11 +162,12 @@
         "お取り寄せ"
       ],
       "verified": false,
-      "note": "Actions では HTTP/2 応答が壊れる or タイムアウト。遮断元は Akamai。長く待たせないよう timeout を短く retries 0 にしている",
-      "enabled": true,
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全6方式 0/3。HTTP/2 は403、HTTP/1.1 と Chromium は接続不能。セルフホストランナーなど別回線なら取得できる可能性がある",
+      "enabled": false,
       "warmupUrl": "https://www.biccamera.com/",
       "timeoutMs": 12000,
-      "retries": 0
+      "retries": 0,
+      "disabledReason": "datacenter-blocked"
     },
     {
       "id": "joshin",
@@ -183,9 +189,10 @@
         "カートに入れる"
       ],
       "verified": false,
-      "note": "Akamai (errors.edgesuite.net) がデータセンター IP を遮断。GitHub Actions からは取得できない可能性が高い",
-      "enabled": true,
-      "warmupUrl": "https://joshinweb.jp/"
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全6方式 0/3 (403, Akamai)。セルフホストランナーなど別回線なら取得できる可能性がある",
+      "enabled": false,
+      "warmupUrl": "https://joshinweb.jp/",
+      "disabledReason": "datacenter-blocked"
     },
     {
       "id": "edion",
@@ -208,7 +215,7 @@
         "在庫わずか"
       ],
       "verified": false,
-      "note": "Cloudflare の JS チャレンジあり。Actions では取得成功するがセレクタ未特定のため一旦ページ全体で判定。diagnose の dump で実 HTML を見て絞り込むこと",
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): Chromium のみ 3/3 成功 (111KB の実ページ)。他方式は Cloudflare で 403。在庫文言は diagnose で要確認",
       "enabled": true,
       "settleMs": 6000,
       "warmupUrl": "https://www.edion.com/"
@@ -231,9 +238,10 @@
         "残りわずか"
       ],
       "verified": false,
-      "note": "Akamai (errors.edgesuite.net) がデータセンター IP を遮断。GitHub Actions からは取得できない可能性が高い",
-      "enabled": true,
-      "warmupUrl": "https://ec.geo-online.co.jp/"
+      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全6方式 0/3 (403, Akamai)。セルフホストランナーなど別回線なら取得できる可能性がある",
+      "enabled": false,
+      "warmupUrl": "https://ec.geo-online.co.jp/",
+      "disabledReason": "datacenter-blocked"
     },
     {
       "id": "tsutaya",
@@ -253,8 +261,9 @@
         "在庫わずか"
       ],
       "verified": false,
-      "note": "TSUTAYA オンラインショッピングは 2025-10-31 にサービス終了。公式ページのリンクが残存しているだけなので恒久的に無効",
-      "enabled": false
+      "note": "TSUTAYA オンラインショッピングは 2025-10-31 にサービス終了。公式ページのリンクが残存しているだけ",
+      "enabled": false,
+      "disabledReason": "permanent"
     },
     {
       "id": "sevennet",
@@ -273,8 +282,9 @@
         "カートに入れる"
       ],
       "verified": false,
-      "note": "公式サイトのリンクが 404（2026-09 時点）。新 URL 判明後に差し替えて enabled: true にする",
-      "enabled": false
+      "note": "公式サイトのリンクが 404（2026-09 時点）。新しい商品 URL が判明したら差し替える",
+      "enabled": false,
+      "disabledReason": "permanent"
     },
     {
       "id": "yamada",
@@ -293,8 +303,9 @@
         "カートに入れる"
       ],
       "verified": false,
-      "note": "公式サイトのリンクが 404（2026-09 時点）。新 URL 判明後に差し替えて enabled: true にする",
-      "enabled": false
+      "note": "公式サイトのリンクが 404（2026-09 時点）。新しい商品 URL が判明したら差し替える",
+      "enabled": false,
+      "disabledReason": "permanent"
     }
   ]
 }
