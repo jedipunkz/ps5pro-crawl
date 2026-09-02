@@ -160,23 +160,21 @@
       "name": "エディオン (CFI-7100B01)",
       "url": "https://www.edion.com/detail.html?p_cd=00084715654",
       "mode": "browser",
-      "selector": null,
+      "selector": ".limit1, .modelInfo2, .inBox2, .btnGray, .btnCart, .btnCartIn, #stockStatus, #stockStatusSale",
       "outOfStock": [
+        "売り切れ",
+        "在庫数0台",
         "販売終了",
-        "在庫切れ",
-        "在庫なし",
-        "お取り扱いできません",
         "入荷未定",
-        " 取扱終了"
+        "お取り扱いできません"
       ],
       "inStock": [
+        "在庫数[1-9][0-9]*台",
         "カートに入れる",
-        "かごに入れる",
-        "在庫あり",
-        "在庫わずか"
+        "かごに入れる"
       ],
-      "verified": false,
-      "note": "商品名「SIE CFI7100B01 PlayStation 5 Pro」。Chromium でのみ取得可 (Cloudflare)。在庫文言は diagnose で要確認",
+      "verified": true,
+      "note": "2026-09-02 diagnose 実測: 「在庫数0台」「売り切れ」を確認。発売日 2025-12-16 / JAN 4948872417075 / 137,970円。Chromium でのみ取得可 (Cloudflare)",
       "enabled": true,
       "settleMs": 6000,
       "warmupUrl": "https://www.edion.com/"

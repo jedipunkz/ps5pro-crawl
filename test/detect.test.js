@@ -14,6 +14,7 @@ const config = await loadConfig(join(here, '..', 'config', 'targets.json'));
 // fixtures は各販売店から実際に取得した HTML（gzip 済み）。
 // in-stock 側は、その HTML の在庫文言だけを差し替えた合成データ。
 const CASES = [
+  ['edion-7100', OUT_OF_STOCK, IN_STOCK],
   ['sony-store', OUT_OF_STOCK, IN_STOCK],
   ['rakuten-books', OUT_OF_STOCK, IN_STOCK],
   ['yodobashi', OUT_OF_STOCK, IN_STOCK],
@@ -86,4 +87,31 @@ test('監視対象に PS5 Pro の両リビジョンが含まれている', () =>
   const enabled = config.targets.filter((t) => t.enabled).map((t) => t.url).join(' ');
   assert.match(enabled, /CFI-7100B01/, '新リビジョンが監視対象にない');
   assert.match(enabled, /CFI-7000B01/, '初期リビジョンが監視対象にない');
+});
+
+test('エディオンの在庫数を数値として読み分ける', async () => {
+  const target = config.targets.find((t) => t.id === 'edion-7100');
+  const soldOut = gunzipSync(
+    await readFile(join(here, 'fixtures', 'edion-7100.out-of-stock.html.gz')),
+  ).toString('utf8');
+
+  // 在庫数だけを 0 -> 2 に変えても在庫ありと読めること。
+  // 「売り切れ」表記が残っている間は在庫なしを優先する。
+  const onlyCountChanged = soldOut.replace('在庫数0台', '在庫数2台');
+  assert.equal(detect(target, onlyCountChanged).status, OUT_OF_STOCK, '売り切れ表記があるうちは在庫なし');
+
+  const r = detect(target, soldOut.replace('在庫数0台', '在庫数2台').replaceAll('売り切れ', 'カートに入れる'));
+  assert.equal(r.status, IN_STOCK, r.reason);
+  assert.match(r.reason, /在庫数/);
+});
+
+test('script 内の文字列で「ページ消滅」と誤判定しない', () => {
+  const target = config.targets.find((t) => t.id === 'edion-7100');
+  const html = `<html><head><title>商品</title></head><body>
+    <script>var msg = "選択された商品は、存在しません。";</script>
+    <div class="limit1">在庫数0台</div>
+    <div>${'商品説明のダミー。'.repeat(60)}</div>
+  </body></html>`;
+  const r = detect(target, html);
+  assert.equal(r.status, OUT_OF_STOCK, r.reason);
 });

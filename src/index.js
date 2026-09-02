@@ -92,7 +92,7 @@ try {
   process.exit(1);
 }
 
-const PRICE_RE = /([1-9][0-9,]{4,9})\s*円/;
+const PRICE_RE = /[￥¥]?\s*([1-9][0-9,]{4,9})\s*(?:円|（税込）|\(税込\))/;
 
 /** 単純なワーカープール。相手サイトを同時に叩きすぎないよう並列数を絞る */
 async function pool(items, limit, worker) {

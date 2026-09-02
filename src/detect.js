@@ -6,11 +6,16 @@ export function extractText(html, selector) {
   const $ = cheerio.load(html);
   const clean = (s) => s.replace(/\s+/g, ' ').trim();
 
-  // 遮断ページの判定用。WAF のチャレンジ文言は <title> や <noscript> にしか
-  // 無いことがあるので、除去する前にここで拾っておく。
-  const raw = clean(`${$('title').text()} ${$('noscript').text()} ${$('body').text()}`);
+  // 先に script/style を落とす。JS のコード中に「売り切れ」「存在しません」
+  // といった文字列が入っていることがあり、遮断・消滅判定を誤らせるため。
+  $('script, style, template, svg').remove();
 
-  $('script, style, noscript, template, svg').remove();
+  // 遮断ページの判定用。WAF のチャレンジ文言は <title> や <noscript> にしか
+  // 無いことがある。cheerio は noscript の中身をテキストとして持つので、
+  // ここで body ごと拾えば noscript の文言も入る。
+  const raw = clean(`${$('title').text()} ${$('body').text()}`);
+
+  $('noscript').remove();
   const body = clean($('body').text());
 
   if (!selector) return { raw, body, scope: body, scoped: false };
