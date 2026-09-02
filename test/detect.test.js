@@ -71,3 +71,19 @@ test('--include-blocked は回線起因の店舗だけを戻す（終了した�
   assert.ok(!withBlocked.includes('tsutaya'), 'サービス終了した TSUTAYA は戻してはいけない');
   assert.ok(!withBlocked.includes('sevennet'), 'リンク切れの 7net は戻してはいけない');
 });
+
+test('200 で返る「商品が存在しない」ページを在庫なしと混同せず LINK_DEAD にする', async () => {
+  // Actions が実際に取得したエディオンのページ。HTTP 200 で 153KB あるのに
+  // 本文は「選択された商品は、存在しません。」で、在庫なしではなく URL が古い。
+  const target = config.targets.find((t) => t.id === 'edion');
+  const html = gunzipSync(await readFile(join(here, 'fixtures', 'edion.link-dead.html.gz'))).toString('utf8');
+  const r = detect(target, html);
+  assert.equal(r.status, 'LINK_DEAD', r.reason);
+  assert.match(r.reason, /存在しません/);
+});
+
+test('監視対象に PS5 Pro の両リビジョンが含まれている', () => {
+  const enabled = config.targets.filter((t) => t.enabled).map((t) => t.url).join(' ');
+  assert.match(enabled, /CFI-7100B01/, '新リビジョンが監視対象にない');
+  assert.match(enabled, /CFI-7000B01/, '初期リビジョンが監視対象にない');
+});

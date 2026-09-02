@@ -9,7 +9,8 @@ import { notifyStock, notifyErrors, notifyTest } from './discord.js';
 import { probeTargets, renderProbeTable } from './probe.js';
 import { computeTransitions } from './transitions.js';
 import { envStr, envInt, envBool, parseInteger } from './env.js';
-import { IN_STOCK, OUT_OF_STOCK, UNKNOWN, ERROR, LABEL, EMOJI } from './status.js';
+import { fetchOfficialRetailers, diffAgainstConfig } from './official.js';
+import { IN_STOCK, OUT_OF_STOCK, UNKNOWN, ERROR, LINK_DEAD, LABEL, EMOJI } from './status.js';
 
 // 引数と環境変数の解釈はここで完結させ、設定ミスはスタックトレースではなく
 // 一行のメッセージで返す
@@ -26,6 +27,7 @@ function parseOptions() {
     'no-state': { type: 'boolean', default: false },
     'test-notify': { type: 'boolean', default: false },
     'dump-dir': { type: 'string' },
+    'check-official': { type: 'boolean', default: false },
     probe: { type: 'boolean', default: false },
     'probe-repeat': { type: 'string', default: '3' },
     'budget-ms': { type: 'string', default: String(envInt('BUDGET_MS', 300000, { min: 1000 })) },
@@ -56,6 +58,7 @@ if (argv.help) {
   --no-state            前回状態を読まず・書かない（在庫ありなら必ず通知される）
   --test-notify         在庫を見ずに Discord へ疎通テストだけ送って終了
   --dump-dir <path>     取得した HTML と抽出テキストを保存する（判定を直すとき用）
+  --check-official      公式ページの販売店リンクと設定の差分を出す
   --probe               取得方法ごとの成否を実測する（通知しない）
   --probe-repeat <n>    --probe の試行回数 (default: 3)
   --budget-ms <ms>      全体の時間予算。超えた分は打ち切る (default: 300000)
@@ -225,7 +228,9 @@ async function main() {
     ...results.map((r) => `| [${r.name}](${r.url}) | ${EMOJI[r.status]} ${LABEL[r.status]} | ${r.reason ?? ''} |`),
   ];
 
-  const unhealthy = results.filter((r) => r.status === ERROR || r.status === UNKNOWN);
+  const unhealthy = results.filter(
+    (r) => r.status === ERROR || r.status === UNKNOWN || r.status === LINK_DEAD,
+  );
   if (unhealthy.length) {
     summary.push(
       '',
@@ -235,6 +240,34 @@ async function main() {
     );
   }
   await writeStepSummary(summary);
+
+  if (argv['check-official']) {
+    // 公式ページのリンクは実際に古くなる。SIE が直したときに気づけるようにする
+    try {
+      const retailers = await fetchOfficialRetailers(config.product?.officialPage);
+      const diff = diffAgainstConfig(retailers, config.targets);
+      const lines = [
+        '',
+        `### 公式ページの販売店リンク（${diff.retailerCount} 店舗）`,
+        '',
+        ...retailers.map((r) => `- ${r.name}: ${r.url}`),
+      ];
+      if (diff.onlyOnOfficial.length) {
+        lines.push('', '**公式ページにあって設定に無い URL（リンクが更新された可能性）**', '');
+        lines.push(...diff.onlyOnOfficial.map((r) => `- ⚠️ ${r.name}: ${r.url}`));
+      } else {
+        lines.push('', '公式ページのリンクに変更はありません。');
+      }
+      console.log(lines.join('\n'));
+      await writeStepSummary(lines);
+      if (argv['dump-dir']) {
+        await mkdir(argv['dump-dir'], { recursive: true });
+        await writeFile(join(argv['dump-dir'], 'official-retailers.json'), JSON.stringify(retailers, null, 2));
+      }
+    } catch (err) {
+      console.warn(`公式ページの確認に失敗しました: ${err.message}`);
+    }
+  }
 
   if (argv['dump-dir']) {
     console.log(`\n取得結果を ${argv['dump-dir']}/ に保存しました`);

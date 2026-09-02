@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { IN_STOCK, OUT_OF_STOCK, UNKNOWN } from './status.js';
+import { IN_STOCK, OUT_OF_STOCK, UNKNOWN, LINK_DEAD } from './status.js';
 
 /** HTML からテキストを取り出す。selector 指定時は判定範囲を絞った文字列も返す */
 export function extractText(html, selector) {
@@ -42,6 +42,14 @@ export function detect(target, html) {
   if (blocked) {
     return { status: UNKNOWN, reason: `ボット判定ページの可能性 (${blocked})`, text: body, scoped };
   }
+  // 商品ページが消えていても 200 を返すサイトがある。エディオンの
+  // 「選択された商品は、存在しません。」がその例で、在庫なしと区別しないと
+  // URL が古くなったことに気づけない。
+  const dead = matchAny(body, target.deadPatterns ?? []);
+  if (dead) {
+    return { status: LINK_DEAD, reason: `商品ページが存在しません (「${dead}」)`, text: body, scoped };
+  }
+
   if (body.length < target.minTextLength) {
     return {
       status: UNKNOWN,

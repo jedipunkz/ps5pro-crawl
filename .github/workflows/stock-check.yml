@@ -64,7 +64,7 @@ jobs:
           args=""
           case "$MODE" in
             dry-run)     args="--dry-run" ;;
-            diagnose)    args="--dry-run --no-state --dump-dir dump" ;;
+            diagnose)    args="--dry-run --no-state --dump-dir dump --check-official" ;;
             probe)       args="--probe --probe-repeat 3 --dump-dir dump" ;;
             force-notify) args="--no-state" ;;
             test-notify) args="--test-notify" ;;

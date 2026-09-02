@@ -1,8 +1,12 @@
 {
   "product": {
-    "name": "PlayStation 5 Pro (CFI-7000B01)",
-    "jan": "4948872416320",
-    "officialPage": "https://www.playstation.com/ja-jp/ps5/buy-now/ps5-pro/"
+    "name": "PlayStation 5 Pro",
+    "skus": {
+      "CFI-7000B01": "初期リビジョン (JAN 4948872416320)",
+      "CFI-7100B01": "新リビジョン (JAN 4948872417075)"
+    },
+    "officialPage": "https://www.playstation.com/ja-jp/ps5/buy-now/ps5-pro/",
+    "note": "公式ページの販売店リンクは初期リビジョン(CFI-7000B01)のまま。各店舗は CFI-7100B01 に移行済みなので両方を監視する"
   },
   "defaults": {
     "timeoutMs": 20000,
@@ -21,12 +25,20 @@
       "アクセスを遮断しました",
       "errors\\.edgesuite\\.net",
       "Checking your browser"
+    ],
+    "deadPatterns": [
+      "選択された商品は、存在しません",
+      "ご指定のページにアクセスできませんでした",
+      "お探しの商品は見つかりませんでした",
+      "商品が見つかりませんでした",
+      "お探しのページは見つかりません",
+      "指定された商品は販売しておりません"
     ]
   },
   "targets": [
     {
       "id": "sony-store",
-      "name": "ソニーストア",
+      "name": "ソニーストア (CFI-7000B01)",
       "url": "https://pur.store.sony.jp/ps5/products/ps5/CFI-7000B01_product/",
       "mode": "http",
       "selector": ".s5-sonystoreBlock__buyAtStore, .s5-shippingLabel",
@@ -45,11 +57,34 @@
       ],
       "verified": true,
       "enabled": true,
-      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全方式 3/3 成功。http で十分"
+      "note": "2026-09-02 実測: 200 / 「入荷待ち」。初期リビジョン。まだページは生きている"
+    },
+    {
+      "id": "sony-store-7100",
+      "name": "ソニーストア (CFI-7100B01)",
+      "url": "https://pur.store.sony.jp/ps5/products/ps5/CFI-7100B01_product/",
+      "mode": "http",
+      "selector": ".s5-sonystoreBlock__buyAtStore, .s5-shippingLabel",
+      "outOfStock": [
+        "入荷待ち",
+        "販売終了",
+        "取扱い終了",
+        "完売"
+      ],
+      "inStock": [
+        "在庫あり",
+        "在庫僅少",
+        "お取り寄せ",
+        "カートに入れる",
+        "購入手続き"
+      ],
+      "verified": true,
+      "enabled": true,
+      "note": "2026-09-02 実測: 200 / 在庫ラベル「入荷待ち」を確認。PS5 Pro の新リビジョン"
     },
     {
       "id": "rakuten-books",
-      "name": "楽天ブックス",
+      "name": "楽天ブックス (CFI-7000B01)",
       "url": "https://books.rakuten.co.jp/rb/18004773/",
       "mode": "http",
       "selector": "#purchaseBox .status-area",
@@ -68,7 +103,83 @@
       ],
       "verified": true,
       "enabled": true,
-      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): http 3/3 成功。browser(mobile) は空ページが返るので使わない"
+      "note": "2026-09-02 実測: 200 / 「ご注文できない商品」。初期リビジョン"
+    },
+    {
+      "id": "rakuten-books-7100",
+      "name": "楽天ブックス (CFI-7100B01)",
+      "url": "https://books.rakuten.co.jp/rb/18470076/",
+      "mode": "http",
+      "selector": "#purchaseBox .status-area",
+      "outOfStock": [
+        "ご注文できない商品",
+        "予約受付終了",
+        "販売終了",
+        "品切れ"
+      ],
+      "inStock": [
+        "在庫あり",
+        "在庫僅少",
+        "入荷予約",
+        "予約受付中",
+        "24時間以内に発送"
+      ],
+      "verified": true,
+      "enabled": true,
+      "note": "2026-09-02 実測: 200 / 「ご注文できない商品」を確認。JAN 4948872417075、137,979円"
+    },
+    {
+      "id": "edion",
+      "name": "エディオン (CFI-7000B01)",
+      "url": "https://www.edion.com/detail.html?p_cd=00079758352",
+      "mode": "browser",
+      "selector": null,
+      "outOfStock": [
+        "販売終了",
+        "在庫切れ",
+        "在庫なし",
+        "お取り扱いできません",
+        "入荷未定",
+        " 取扱終了"
+      ],
+      "inStock": [
+        "カートに入れる",
+        "かごに入れる",
+        "在庫あり",
+        "在庫わずか"
+      ],
+      "verified": false,
+      "note": "2026-09-02 実測: 200 で返るが本文は「選択された商品は、存在しません。」。商品が削除済み",
+      "enabled": false,
+      "settleMs": 6000,
+      "warmupUrl": "https://www.edion.com/",
+      "disabledReason": "permanent"
+    },
+    {
+      "id": "edion-7100",
+      "name": "エディオン (CFI-7100B01)",
+      "url": "https://www.edion.com/detail.html?p_cd=00084715654",
+      "mode": "browser",
+      "selector": null,
+      "outOfStock": [
+        "販売終了",
+        "在庫切れ",
+        "在庫なし",
+        "お取り扱いできません",
+        "入荷未定",
+        " 取扱終了"
+      ],
+      "inStock": [
+        "カートに入れる",
+        "かごに入れる",
+        "在庫あり",
+        "在庫わずか"
+      ],
+      "verified": false,
+      "note": "商品名「SIE CFI7100B01 PlayStation 5 Pro」。Chromium でのみ取得可 (Cloudflare)。在庫文言は diagnose で要確認",
+      "enabled": true,
+      "settleMs": 6000,
+      "warmupUrl": "https://www.edion.com/"
     },
     {
       "id": "yodobashi",
@@ -193,32 +304,6 @@
       "enabled": false,
       "warmupUrl": "https://joshinweb.jp/",
       "disabledReason": "datacenter-blocked"
-    },
-    {
-      "id": "edion",
-      "name": "エディオン",
-      "url": "https://www.edion.com/detail.html?p_cd=00079758352",
-      "mode": "browser",
-      "selector": null,
-      "outOfStock": [
-        "販売終了",
-        "在庫切れ",
-        "在庫なし",
-        "お取り扱いできません",
-        "入荷未定",
-        " 取扱終了"
-      ],
-      "inStock": [
-        "カートに入れる",
-        "かごに入れる",
-        "在庫あり",
-        "在庫わずか"
-      ],
-      "verified": false,
-      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): Chromium のみ 3/3 成功 (111KB の実ページ)。他方式は Cloudflare で 403。在庫文言は diagnose で要確認",
-      "enabled": true,
-      "settleMs": 6000,
-      "warmupUrl": "https://www.edion.com/"
     },
     {
       "id": "geo",

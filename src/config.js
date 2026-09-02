@@ -47,6 +47,7 @@ export async function loadConfig(path) {
       retries: t.retries ?? defaults.retries,
       minTextLength: t.minTextLength ?? defaults.minTextLength,
       blockedPatterns: t.blockedPatterns ?? defaults.blockedPatterns,
+      deadPatterns: t.deadPatterns ?? defaults.deadPatterns ?? [],
     };
   });
 
