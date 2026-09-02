@@ -1,0 +1,71 @@
+name: PS5 Pro 在庫チェック
+
+on:
+  schedule:
+    # 10 分間隔。GitHub の schedule は混雑時に数分〜十数分遅延することがある
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Discord に通知せず結果だけ出す'
+        type: boolean
+        default: false
+      only:
+        description: '対象を絞る (例: sony-store,rakuten-books)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  # 前回の実行が長引いても多重起動させない
+  group: ps5pro-stock-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Chromium をインストール
+        run: npx playwright install --with-deps chromium
+
+      # 前回の在庫状態を持ち回す。これが無いと毎回通知が飛ぶ。
+      # cache は 7 日で失効するが、失われても重複通知が 1 回出るだけで復旧する。
+      - name: 前回の状態を復元
+        uses: actions/cache/restore@v4
+        with:
+          path: .state
+          key: ps5pro-state-${{ github.run_id }}
+          restore-keys: |
+            ps5pro-state-
+
+      - name: 在庫チェック
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_MENTION: ${{ vars.DISCORD_MENTION }}
+          NOTIFY_ON_ERROR: ${{ vars.NOTIFY_ON_ERROR }}
+          NOTIFY_ON_SOLD_OUT: ${{ vars.NOTIFY_ON_SOLD_OUT }}
+          ERROR_THRESHOLD: ${{ vars.ERROR_THRESHOLD }}
+        run: |
+          args=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then args="$args --dry-run"; fi
+          if [ -n "${{ inputs.only }}" ]; then args="$args --only ${{ inputs.only }}"; fi
+          node src/index.js $args
+
+      - name: 状態を保存
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .state
+          key: ps5pro-state-${{ github.run_id }}

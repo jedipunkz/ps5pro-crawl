@@ -1,0 +1,20 @@
+{
+  "name": "ps5pro-crawl",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PS5 Pro の公式取扱店の在庫を定期クロールし、在庫を検知したら Discord に通知する",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node src/index.js",
+    "dry": "node src/index.js --dry-run",
+    "http": "node src/index.js --dry-run --http-only",
+    "test": "node --test 'test/*.test.js'"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "playwright": "^1.55.0"
+  }
+}
