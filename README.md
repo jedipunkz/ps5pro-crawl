@@ -30,7 +30,38 @@ Webhook URL は Secret に入れてください。URL を知っている人は�
 ### 3. 有効化
 
 `.github/workflows/stock-check.yml` が 10 分間隔で動きます。
-Actions タブから **workflow_dispatch** で手動実行もでき、`dry_run` を有効にすると通知せず結果だけ確認できます。
+
+### 4. 通知が届くか確かめる
+
+在庫が復活するまで待たなくても、Webhook の設定だけ先に確認できます。
+
+**Actions** タブ → 左の **「PS5 Pro 在庫チェック」** → 右上の **「Run workflow」** →
+`実行内容` で **`test-notify`** を選んで実行してください。
+Discord に疎通テストのメッセージが届けば設定完了です。
+
+## 手動実行（workflow_dispatch）
+
+Actions タブの **「Run workflow」** から、`実行内容` を選んで実行できます。
+
+| 実行内容 | 動作 | 使いどころ |
+| --- | --- | --- |
+| `normal` | 定期実行と同じ。状態が変化していれば通知 | すぐ結果を知りたいとき |
+| `dry-run` | 通知せず結果だけ出す | 判定文言を調整したとき |
+| `force-notify` | 前回状態を無視。在庫ありならその場で必ず通知 | 通知経路の確認 |
+| `test-notify` | 在庫を見ず Discord に疎通テストだけ送る | Webhook 設定直後 |
+
+補助的な入力が 2 つあります。
+
+- **`only`** — `sony-store,rakuten-books` のように店舗を絞ります（id は `config/targets.json` 参照）。
+- **`http_only`** — Chromium が要る店舗を除外します。ブラウザのインストールを飛ばすぶん起動が速くなります。
+
+判定結果は実行ログではなく **Actions のジョブサマリ**に表で出ます。全店舗の状態と判定根拠が一覧できるので、
+文言を調整するときはここを見てください。
+
+`force-notify` と `test-notify` では**状態を保存しません**。手動実行の副作用で
+次の定期実行の判定が狂わないようにするためです。
+
+ローカルから同じことをする場合は `--no-state` / `--test-notify` を使います。
 
 ## ローカルでの実行
 
@@ -41,6 +72,7 @@ npx playwright install --with-deps chromium   # browser モードの店舗を見
 npm run http                                  # Chromium 不要な店舗だけを通知なしで確認
 npm run dry                                   # 全店舗を通知なしで確認
 node src/index.js --only sony-store --dry-run # 店舗を絞って確認
+node src/index.js --test-notify               # Discord への疎通テストだけ送る
 node src/index.js --help                      # オプション一覧
 npm test                                      # 在庫判定ロジックのテスト
 ```

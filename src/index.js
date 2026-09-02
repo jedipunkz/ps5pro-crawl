@@ -4,7 +4,7 @@ import { loadConfig, selectTargets } from './config.js';
 import { fetchHttp, BrowserPool } from './fetcher.js';
 import { detect } from './detect.js';
 import { loadState, saveState } from './state.js';
-import { notifyStock, notifyErrors } from './discord.js';
+import { notifyStock, notifyErrors, notifyTest } from './discord.js';
 import { computeTransitions } from './transitions.js';
 import { IN_STOCK, OUT_OF_STOCK, ERROR, LABEL, EMOJI } from './status.js';
 
@@ -17,6 +17,7 @@ const { values: argv } = parseArgs({
     'http-only': { type: 'boolean', default: false },
     'include-disabled': { type: 'boolean', default: false },
     'no-state': { type: 'boolean', default: false },
+    'test-notify': { type: 'boolean', default: false },
     concurrency: { type: 'string', default: process.env.CONCURRENCY ?? '3' },
     help: { type: 'boolean', default: false },
   },
@@ -31,7 +32,8 @@ if (argv.help) {
   --http-only           http モードのターゲットのみ（Chromium 不要）
   --include-disabled    enabled:false のターゲットも対象にする
   --dry-run             Discord に通知せず結果を標準出力するだけ
-  --no-state            前回状態を読まず・書かない
+  --no-state            前回状態を読まず・書かない（在庫ありなら必ず通知される）
+  --test-notify         在庫を見ずに Discord へ疎通テストだけ送って終了
   --concurrency <n>     並列数 (default: 3)
 
 環境変数:
@@ -91,6 +93,17 @@ async function writeStepSummary(lines) {
 
 async function main() {
   const config = await loadConfig(argv.config);
+
+  if (argv['test-notify']) {
+    if (!WEBHOOK) throw new Error('DISCORD_WEBHOOK_URL が未設定です');
+    await notifyTest(WEBHOOK, {
+      productName: config.product?.name,
+      mention: process.env.DISCORD_MENTION,
+    });
+    console.log('Discord に疎通テストを送信しました');
+    return;
+  }
+
   const targets = selectTargets(config.targets, {
     only: argv.only?.split(',').map((s) => s.trim()).filter(Boolean),
     httpOnly: argv['http-only'],

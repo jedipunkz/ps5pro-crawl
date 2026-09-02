@@ -78,3 +78,22 @@ export async function notifyErrors(webhookUrl, { results, threshold }) {
     ],
   });
 }
+
+/** Webhook の疎通確認。設定直後に「本当に届くか」を在庫を待たずに確かめるため */
+export async function notifyTest(webhookUrl, { productName, mention }) {
+  await post(webhookUrl, {
+    content: [mention, 'ps5pro-crawl の疎通テストです。これが見えていれば通知設定は正常です。']
+      .filter(Boolean)
+      .join(' '),
+    allowed_mentions: mention ? undefined : { parse: [] },
+    embeds: [
+      {
+        title: '✅ Webhook 疎通テスト',
+        description: `監視対象: **${productName ?? 'PS5 Pro'}**\n在庫を検知するとこの形式で通知されます。`,
+        color: 0x3498db,
+        timestamp: new Date().toISOString(),
+        footer: { text: 'ps5pro-crawl' },
+      },
+    ],
+  });
+}

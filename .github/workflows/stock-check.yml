@@ -4,22 +4,34 @@ on:
   schedule:
     # 10 分間隔。GitHub の schedule は混雑時に数分〜十数分遅延することがある
     - cron: '*/10 * * * *'
+
+  # Actions タブ → このワークフロー → "Run workflow" から手動実行できる
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Discord に通知せず結果だけ出す'
-        type: boolean
-        default: false
+      mode:
+        description: '実行内容'
+        type: choice
+        default: 'normal'
+        options:
+          - normal        # 通常どおりチェックし、状態が変化していれば通知する
+          - dry-run       # 通知せず結果だけ出す（設定を試すとき用）
+          - force-notify  # 前回状態を無視。在庫ありならその場で必ず通知する
+          - test-notify   # 在庫を見ず、Discord に疎通テストだけ送る
       only:
-        description: '対象を絞る (例: sony-store,rakuten-books)'
+        description: '対象を絞る (例: sony-store,rakuten-books)。空なら全店舗'
         type: string
         default: ''
+      http_only:
+        description: 'Chromium 不要の店舗のみ（起動が速い）'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  # 前回の実行が長引いても多重起動させない
+  # 前回の実行が長引いても多重起動させない。
+  # 手動実行と定期実行がぶつかったときは後から来たほうを待たせる。
   group: ps5pro-stock-check
   cancel-in-progress: false
 
@@ -37,12 +49,56 @@ jobs:
 
       - run: npm ci
 
+      # 引数の組み立て。inputs は信頼できない文字列なので env 経由で渡し、
+      # シェルに直接展開しない。
+      - name: 実行モードを決める
+        id: opts
+        env:
+          MODE: ${{ inputs.mode || 'normal' }}
+          ONLY: ${{ inputs.only }}
+          HTTP_ONLY: ${{ inputs.http_only }}
+        run: |
+          set -euo pipefail
+          args=""
+          case "$MODE" in
+            dry-run)     args="--dry-run" ;;
+            force-notify) args="--no-state" ;;
+            test-notify) args="--test-notify" ;;
+            normal)      args="" ;;
+            *) echo "不明な mode: $MODE" >&2; exit 1 ;;
+          esac
+
+          if [ "$HTTP_ONLY" = "true" ]; then
+            args="$args --http-only"
+          fi
+
+          if [ -n "$ONLY" ]; then
+            # 想定するのは英数字・ハイフン・カンマのみ
+            if ! printf '%s' "$ONLY" | grep -qE '^[A-Za-z0-9,_-]+$'; then
+              echo "only に使えない文字が含まれています: $ONLY" >&2
+              exit 1
+            fi
+            args="$args --only $ONLY"
+          fi
+
+          # test-notify と http-only ではブラウザを使わないのでインストールを省く
+          needs_browser=true
+          if [ "$MODE" = "test-notify" ] || [ "$HTTP_ONLY" = "true" ]; then
+            needs_browser=false
+          fi
+
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+          echo "needs_browser=$needs_browser" >> "$GITHUB_OUTPUT"
+          echo "実行引数: node src/index.js $args"
+
       - name: Chromium をインストール
+        if: steps.opts.outputs.needs_browser == 'true'
         run: npx playwright install --with-deps chromium
 
       # 前回の在庫状態を持ち回す。これが無いと毎回通知が飛ぶ。
       # cache は 7 日で失効するが、失われても重複通知が 1 回出るだけで復旧する。
       - name: 前回の状態を復元
+        if: inputs.mode != 'test-notify'
         uses: actions/cache/restore@v4
         with:
           path: .state
@@ -57,14 +113,13 @@ jobs:
           NOTIFY_ON_ERROR: ${{ vars.NOTIFY_ON_ERROR }}
           NOTIFY_ON_SOLD_OUT: ${{ vars.NOTIFY_ON_SOLD_OUT }}
           ERROR_THRESHOLD: ${{ vars.ERROR_THRESHOLD }}
-        run: |
-          args=""
-          if [ "${{ inputs.dry_run }}" = "true" ]; then args="$args --dry-run"; fi
-          if [ -n "${{ inputs.only }}" ]; then args="$args --only ${{ inputs.only }}"; fi
-          node src/index.js $args
+          ARGS: ${{ steps.opts.outputs.args }}
+        run: node src/index.js $ARGS
 
+      # force-notify / test-notify では状態を書き換えない。
+      # 手動実行の副作用で次回の定期実行の判定を狂わせないため。
       - name: 状態を保存
-        if: always()
+        if: always() && inputs.mode != 'force-notify' && inputs.mode != 'test-notify'
         uses: actions/cache/save@v4
         with:
           path: .state
