@@ -22,9 +22,12 @@ const HTTP_HEADERS = {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class HttpError extends Error {
-  constructor(status, url) {
-    super(`HTTP ${status} (${url})`);
+  constructor(status, url, body = null) {
+    // 403 は「壊れている」のではなく「弾かれた」。原因調査で区別できるよう文言を分ける
+    const label = status === 403 ? 'アクセス遮断 (HTTP 403)' : `HTTP ${status}`;
+    super(`${label} (${url})`);
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -58,8 +61,9 @@ export async function fetchHttp(target) {
           redirect: 'follow',
           signal: ac.signal,
         });
-        if (!res.ok) throw new HttpError(res.status, target.url);
-        return { html: await res.text(), finalUrl: res.url, status: res.status };
+        const body = await res.text();
+        if (!res.ok) throw new HttpError(res.status, target.url, body);
+        return { html: body, finalUrl: res.url, status: res.status };
       } finally {
         clearTimeout(timer);
       }
@@ -74,23 +78,26 @@ export async function fetchHttp(target) {
  * ブラウザは全ターゲットで 1 プロセスを使い回す（起動が最も高コストなため）。
  */
 export class BrowserPool {
-  #browser = null;
-  #context = null;
+  // 起動オプションが違うものは別プロセスになるので、キーごとに保持する
+  #pools = new Map();
 
-  async #ensure() {
-    if (this.#context) return this.#context;
+  async #ensure(key, { disableHttp2 }) {
+    if (this.#pools.has(key)) return this.#pools.get(key).context;
+
     const { chromium } = await import('playwright');
-    const launchOptions = {
-      args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled'],
-    };
+    const args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled'];
+    // 一部サイトは HTTP/2 で応答が壊れる (ERR_HTTP2_PROTOCOL_ERROR)
+    if (disableHttp2) args.push('--disable-http2');
+
+    const launchOptions = { args };
     if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
       launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
     }
     if (process.env.CRAWLER_PROXY) {
       launchOptions.proxy = { server: process.env.CRAWLER_PROXY };
     }
-    this.#browser = await chromium.launch(launchOptions);
-    this.#context = await this.#browser.newContext({
+    const browser = await chromium.launch(launchOptions);
+    const context = await browser.newContext({
       userAgent: UA,
       locale: 'ja-JP',
       timezoneId: 'Asia/Tokyo',
@@ -98,14 +105,17 @@ export class BrowserPool {
       extraHTTPHeaders: { 'Accept-Language': 'ja-JP,ja;q=0.9,en;q=0.8' },
     });
     // navigator.webdriver を隠す。これだけで通る簡易ボット判定がまだ多い
-    await this.#context.addInitScript(() => {
+    await context.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
-    return this.#context;
+
+    this.#pools.set(key, { browser, context });
+    return context;
   }
 
   async fetch(target) {
-    const ctx = await this.#ensure();
+    const key = target.disableHttp2 ? 'no-http2' : 'default';
+    const ctx = await this.#ensure(key, { disableHttp2: !!target.disableHttp2 });
     return withRetry(
       async () => {
         const page = await ctx.newPage();
@@ -116,18 +126,27 @@ export class BrowserPool {
           return route.continue();
         });
         try {
+          // 先にトップページを踏んで Cookie を得ておく。
+          // Cloudflare / Akamai のチャレンジは初回訪問で発行された Cookie を見ることがある。
+          if (target.warmupUrl) {
+            await page
+              .goto(target.warmupUrl, { waitUntil: 'domcontentloaded', timeout: target.timeoutMs })
+              .catch(() => {});
+            await page.waitForTimeout(2000);
+          }
           const res = await page.goto(target.url, {
             waitUntil: 'domcontentloaded',
             timeout: target.timeoutMs,
           });
           const status = res?.status() ?? 0;
-          if (status >= 400) throw new HttpError(status, target.url);
+          if (status >= 400) throw new HttpError(status, target.url, await page.content().catch(() => null));
           if (target.waitForSelector) {
             await page
               .waitForSelector(target.waitForSelector, { timeout: 8000 })
               .catch(() => {});
           }
-          await page.waitForTimeout(1500); // 在庫欄の遅延描画ぶんの猶予
+          // 在庫欄の遅延描画と、JS チャレンジの自動解決を待つ猶予
+          await page.waitForTimeout(target.settleMs ?? 1500);
           return { html: await page.content(), finalUrl: page.url(), status };
         } finally {
           await page.close().catch(() => {});
@@ -139,9 +158,10 @@ export class BrowserPool {
   }
 
   async close() {
-    await this.#context?.close().catch(() => {});
-    await this.#browser?.close().catch(() => {});
-    this.#context = null;
-    this.#browser = null;
+    for (const { browser, context } of this.#pools.values()) {
+      await context.close().catch(() => {});
+      await browser.close().catch(() => {});
+    }
+    this.#pools.clear();
   }
 }

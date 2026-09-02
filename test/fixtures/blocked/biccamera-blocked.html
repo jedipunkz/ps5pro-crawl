@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+        <script type="text/javascript">
+        window.onload = function() {
+          var request = new XMLHttpRequest();
+          request.open('GET', 'clientinfo.json', true);
+          request.responseType = 'json';
+          request.send();
+          request.onload = function () {
+            var data = this.response;
+            var datetime = new Date(data.unixtime * 1000);
+            var clientip = document.getElementById('clientip');
+            clientip.appendChild(document.createTextNode(data.clientip));
+            var timestr = document.getElementById('timestr');
+            timestr.appendChild(document.createTextNode(datetime.toString()));
+          };
+        }
+        </script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通信に問題があるためアクセスを遮断しました。</title>
+</head>
+
+<body>
+
+<div style="padding:20px;margin:0 auto;width:80%;max-width:760px;border:1px solid #ccc;border-radius:8px;position: absolute;top: 50%;left: 50%;transform: translate(-50%, -50%);-webkit-transform: translate(-50%, -50%);-ms-transform: translate(-50%, -50%);" >
+	<p style="font-weight:bold;text-align:center;font-size:1.6em;"><span style="display:inline-block">通信に問題があるため</span><span style="display:inline-block">アクセスを遮断しました</span></p>
+	<p style="text-align:center;"><span style="display:inline-block">お問い合わせの際はメールに</span><span style="display:inline-block">この画面のキャプチャを添付して下さい</span></p>
+	<p style="text-align:center;">ビックカメラ.com</p>
+	<hr>
+	<dl>
+		<dt style="float:left;width:150px">Case Number：</dt>
+		<dd style="margin-left:150px;width:calc(100% - 150px);word-break:break-all">0.4ca4c017.1788347237.4134752e</dd>
+		<dt style="float:left;width:150px">Client IP Address：</dt>
+		<dd style="margin-left:150px;width:calc(100% - 150px);word-break:break-all">160.79.106.131</dd>
+	</dl>
+</div>
+
+
+<script type="text/javascript"  src="/OMgb/uDUW/X_/xJ5l/F7Kg/SGt1fru5h7Lu/cU0jBwVCYw/BmN0/WGQZUU4Y?v=643c6ebc-7c00-9f6b-4728-9f88a24017c0" defer></script></body></html>

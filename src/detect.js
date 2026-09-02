@@ -4,16 +4,20 @@ import { IN_STOCK, OUT_OF_STOCK, UNKNOWN } from './status.js';
 /** HTML からテキストを取り出す。selector 指定時は判定範囲を絞った文字列も返す */
 export function extractText(html, selector) {
   const $ = cheerio.load(html);
-  $('script, style, noscript, template, svg').remove();
-
   const clean = (s) => s.replace(/\s+/g, ' ').trim();
+
+  // 遮断ページの判定用。WAF のチャレンジ文言は <title> や <noscript> にしか
+  // 無いことがあるので、除去する前にここで拾っておく。
+  const raw = clean(`${$('title').text()} ${$('noscript').text()} ${$('body').text()}`);
+
+  $('script, style, noscript, template, svg').remove();
   const body = clean($('body').text());
 
-  if (!selector) return { body, scope: body, scoped: false };
+  if (!selector) return { raw, body, scope: body, scoped: false };
 
   const found = $(selector);
-  if (found.length === 0) return { body, scope: body, scoped: false };
-  return { body, scope: clean(found.text()), scoped: true };
+  if (found.length === 0) return { raw, body, scope: body, scoped: false };
+  return { raw, body, scope: clean(found.text()), scoped: true };
 }
 
 function matchAny(text, patterns) {
@@ -29,11 +33,12 @@ function matchAny(text, patterns) {
  * 在庫ありを先に見ると誤通知になるため。
  */
 export function detect(target, html) {
-  const { body, scope, scoped } = extractText(html, target.selector);
+  const { raw, body, scope, scoped } = extractText(html, target.selector);
 
-  // ブロック判定とページ健全性チェックはページ全体で見る。
-  // selector で絞ったテキストは数文字のことがあり、長さ判定に使えない。
-  const blocked = matchAny(body, target.blockedPatterns ?? []);
+  // ブロック判定は title / noscript を含む全文で見る。
+  // ページ健全性チェックは本文で見る（selector で絞ったテキストは
+  // 数文字のことがあり、長さ判定に使えないため）。
+  const blocked = matchAny(raw, target.blockedPatterns ?? []);
   if (blocked) {
     return { status: UNKNOWN, reason: `ボット判定ページの可能性 (${blocked})`, text: body, scoped };
   }

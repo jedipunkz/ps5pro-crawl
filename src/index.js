@@ -1,12 +1,13 @@
 import { parseArgs } from 'node:util';
-import { appendFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { loadConfig, selectTargets } from './config.js';
 import { fetchHttp, BrowserPool } from './fetcher.js';
 import { detect } from './detect.js';
 import { loadState, saveState } from './state.js';
 import { notifyStock, notifyErrors, notifyTest } from './discord.js';
 import { computeTransitions } from './transitions.js';
-import { IN_STOCK, OUT_OF_STOCK, ERROR, LABEL, EMOJI } from './status.js';
+import { IN_STOCK, OUT_OF_STOCK, UNKNOWN, ERROR, LABEL, EMOJI } from './status.js';
 
 const { values: argv } = parseArgs({
   options: {
@@ -18,6 +19,7 @@ const { values: argv } = parseArgs({
     'include-disabled': { type: 'boolean', default: false },
     'no-state': { type: 'boolean', default: false },
     'test-notify': { type: 'boolean', default: false },
+    'dump-dir': { type: 'string' },
     concurrency: { type: 'string', default: process.env.CONCURRENCY ?? '3' },
     help: { type: 'boolean', default: false },
   },
@@ -34,6 +36,7 @@ if (argv.help) {
   --dry-run             Discord に通知せず結果を標準出力するだけ
   --no-state            前回状態を読まず・書かない（在庫ありなら必ず通知される）
   --test-notify         在庫を見ずに Discord へ疎通テストだけ送って終了
+  --dump-dir <path>     取得した HTML と抽出テキストを保存する（判定を直すとき用）
   --concurrency <n>     並列数 (default: 3)
 
 環境変数:
@@ -69,11 +72,25 @@ async function pool(items, limit, worker) {
   return results;
 }
 
-async function checkTarget(target, browser) {
+/** 判定を直すには実際に取得できた HTML が要る。ローカルで再現できない環境ほど重要 */
+async function dump(dir, target, { html, text, note }) {
+  if (!dir) return;
+  await mkdir(dir, { recursive: true });
+  if (html) await writeFile(join(dir, `${target.id}.html`), html);
+  if (text) await writeFile(join(dir, `${target.id}.txt`), text);
+  if (note) await writeFile(join(dir, `${target.id}.note.txt`), note);
+}
+
+async function checkTarget(target, browser, dumpDir) {
   const base = { id: target.id, name: target.name, url: target.url, verified: target.verified };
   try {
     const { html, status } = target.mode === 'browser' ? await browser.fetch(target) : await fetchHttp(target);
     const { status: stockStatus, reason, text } = detect(target, html);
+    await dump(dumpDir, target, {
+      html,
+      text,
+      note: `url: ${target.url}\nmode: ${target.mode}\nhttp: ${status}\nselector: ${target.selector ?? '(なし)'}\n判定: ${stockStatus} — ${reason}\n`,
+    });
     return {
       ...base,
       status: stockStatus,
@@ -82,6 +99,8 @@ async function checkTarget(target, browser) {
       price: text.match(PRICE_RE)?.[0] ?? null,
     };
   } catch (err) {
+    // 403 の応答本文には遮断の理由（WAF 名や Reference ID）が入っていることが多い
+    await dump(dumpDir, target, { html: err.body ?? null, note: `url: ${target.url}\nmode: ${target.mode}\nエラー: ${err.message}\n` });
     return { ...base, status: ERROR, reason: err.message, httpStatus: err.status ?? null, price: null };
   }
 }
@@ -126,7 +145,7 @@ async function main() {
   let results;
   try {
     results = await pool(targets, CONCURRENCY, async (t) => {
-      const r = await checkTarget(t, browser);
+      const r = await checkTarget(t, browser, argv['dump-dir']);
       console.log(`${EMOJI[r.status]} ${r.name.padEnd(22)} ${LABEL[r.status]} — ${r.reason}`);
       return r;
     });
@@ -147,7 +166,21 @@ async function main() {
     '| --- | --- | --- |',
     ...results.map((r) => `| [${r.name}](${r.url}) | ${EMOJI[r.status]} ${LABEL[r.status]} | ${r.reason ?? ''} |`),
   ];
+
+  const unhealthy = results.filter((r) => r.status === ERROR || r.status === UNKNOWN);
+  if (unhealthy.length) {
+    summary.push(
+      '',
+      `判定できなかった店舗が ${unhealthy.length} 件あります。`,
+      '`実行内容: diagnose` で手動実行すると、実際に取得した HTML がアーティファクトに保存され、',
+      '`config/targets.json` の `selector` / `outOfStock` / `inStock` を実データに合わせて直せます。',
+    );
+  }
   await writeStepSummary(summary);
+
+  if (argv['dump-dir']) {
+    console.log(`\n取得結果を ${argv['dump-dir']}/ に保存しました`);
+  }
 
   if (DRY_RUN) {
     console.log('\n--- dry-run のため通知はしません ---');
