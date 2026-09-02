@@ -8,27 +8,40 @@ import { loadState, saveState } from './state.js';
 import { notifyStock, notifyErrors, notifyTest } from './discord.js';
 import { probeTargets, renderProbeTable } from './probe.js';
 import { computeTransitions } from './transitions.js';
+import { envStr, envInt, envBool, parseInteger } from './env.js';
 import { IN_STOCK, OUT_OF_STOCK, UNKNOWN, ERROR, LABEL, EMOJI } from './status.js';
 
-const { values: argv } = parseArgs({
+// 引数と環境変数の解釈はここで完結させ、設定ミスはスタックトレースではなく
+// 一行のメッセージで返す
+function parseOptions() {
+  return parseArgs({
   options: {
     config: { type: 'string', default: 'config/targets.json' },
-    state: { type: 'string', default: process.env.STATE_FILE ?? '.state/state.json' },
+    state: { type: 'string', default: envStr('STATE_FILE', '.state/state.json') },
     only: { type: 'string' },
     'dry-run': { type: 'boolean', default: false },
     'http-only': { type: 'boolean', default: false },
     'include-disabled': { type: 'boolean', default: false },
-    'include-blocked': { type: 'boolean', default: process.env.INCLUDE_BLOCKED === 'true' },
+    'include-blocked': { type: 'boolean', default: envBool('INCLUDE_BLOCKED', false) },
     'no-state': { type: 'boolean', default: false },
     'test-notify': { type: 'boolean', default: false },
     'dump-dir': { type: 'string' },
     probe: { type: 'boolean', default: false },
     'probe-repeat': { type: 'string', default: '3' },
-    'budget-ms': { type: 'string', default: process.env.BUDGET_MS ?? '300000' },
-    concurrency: { type: 'string', default: process.env.CONCURRENCY ?? '3' },
+    'budget-ms': { type: 'string', default: String(envInt('BUDGET_MS', 300000, { min: 1000 })) },
+    concurrency: { type: 'string', default: String(envInt('CONCURRENCY', 3, { min: 1 })) },
     help: { type: 'boolean', default: false },
   },
-});
+  }).values;
+}
+
+let argv;
+try {
+  argv = parseOptions();
+} catch (err) {
+  console.error(`設定エラー: ${err.message}`);
+  process.exit(1);
+}
 
 if (argv.help) {
   console.log(`使い方: node src/index.js [options]
@@ -60,12 +73,21 @@ if (argv.help) {
   process.exit(0);
 }
 
-const DRY_RUN = argv['dry-run'];
-const CONCURRENCY = Math.max(1, Number(argv.concurrency) || 3);
-const WEBHOOK = process.env.DISCORD_WEBHOOK_URL;
-const ERROR_THRESHOLD = Number(process.env.ERROR_THRESHOLD ?? 3);
-const NOTIFY_ON_ERROR = process.env.NOTIFY_ON_ERROR === 'true';
-const NOTIFY_ON_SOLD_OUT = process.env.NOTIFY_ON_SOLD_OUT !== 'false';
+let DRY_RUN, CONCURRENCY, BUDGET_MS, WEBHOOK, ERROR_THRESHOLD;
+let NOTIFY_ON_ERROR, NOTIFY_ON_SOLD_OUT, DISCORD_MENTION;
+try {
+  DRY_RUN = argv['dry-run'];
+  CONCURRENCY = parseInteger(argv.concurrency, '--concurrency', { min: 1 });
+  BUDGET_MS = parseInteger(argv['budget-ms'], '--budget-ms', { min: 1000 });
+  WEBHOOK = envStr('DISCORD_WEBHOOK_URL');
+  ERROR_THRESHOLD = envInt('ERROR_THRESHOLD', 3, { min: 1 });
+  NOTIFY_ON_ERROR = envBool('NOTIFY_ON_ERROR', false);
+  NOTIFY_ON_SOLD_OUT = envBool('NOTIFY_ON_SOLD_OUT', true);
+  DISCORD_MENTION = envStr('DISCORD_MENTION');
+} catch (err) {
+  console.error(`設定エラー: ${err.message}`);
+  process.exit(1);
+}
 
 const PRICE_RE = /([1-9][0-9,]{4,9})\s*円/;
 
@@ -120,8 +142,9 @@ async function checkTarget(target, browser, dumpDir, deadline) {
 }
 
 async function writeStepSummary(lines) {
-  if (!process.env.GITHUB_STEP_SUMMARY) return;
-  await appendFile(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+  const path = envStr('GITHUB_STEP_SUMMARY');
+  if (!path) return;
+  await appendFile(path, lines.join('\n') + '\n');
 }
 
 async function main() {
@@ -131,7 +154,7 @@ async function main() {
     if (!WEBHOOK) throw new Error('DISCORD_WEBHOOK_URL が未設定です');
     await notifyTest(WEBHOOK, {
       productName: config.product?.name,
-      mention: process.env.DISCORD_MENTION,
+      mention: DISCORD_MENTION,
     });
     console.log('Discord に疎通テストを送信しました');
     return;
@@ -156,11 +179,13 @@ async function main() {
 
   // 1 店舗のハングでジョブ全体が制限時間に達し、通知まで到達しないのを防ぐ。
   // 実際に、ビックカメラの 30 秒タイムアウト x 3 回でジョブがキャンセルされた。
-  const deadline = Date.now() + Number(argv['budget-ms']);
+  const deadline = Date.now() + BUDGET_MS;
 
   if (argv.probe) {
     console.log('取得方法ごとの成否を実測します（通知はしません）');
-    const rows = await probeTargets(targets, { repeat: Number(argv['probe-repeat']) });
+    const rows = await probeTargets(targets, {
+      repeat: parseInteger(argv['probe-repeat'], '--probe-repeat', { min: 1 }),
+    });
     const table = renderProbeTable(rows);
     console.log('\n' + table.join('\n'));
     await writeStepSummary(table);
@@ -223,7 +248,7 @@ async function main() {
       await notifyStock(WEBHOOK, {
         results: newlyInStock,
         productName,
-        mention: process.env.DISCORD_MENTION,
+        mention: DISCORD_MENTION,
       });
       console.log(`Discord に在庫通知を送信しました (${newlyInStock.length} 店舗)`);
     }
