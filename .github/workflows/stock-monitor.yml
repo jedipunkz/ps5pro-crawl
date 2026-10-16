@@ -5,11 +5,8 @@ name: PS5 Pro 在庫監視（常駐）
 # 自分自身を workflow_dispatch で起動し直してリレーする。
 # Actions の分数を常時消費するので public リポジトリ（標準ランナー無料）でのみ使うこと。
 #
-# 止められないための抑制（GitHub と販売店の両方に対して）:
-# - 深夜 JST 2:00〜7:00 はランナーを一切使わない（ループを終え、リレーもしない）
-# - 間隔は 5 分 (CHECK_INTERVAL_SEC)。Chromium を使う店舗 (Amazon / エディオン) は BROWSER_EVERY 回に 1 回にも絞れる。
-#   CPU 負荷と、データセンター IP を遮断しやすい店舗へのアクセス数を減らす
-# - 間隔に 0〜JITTER_SEC 秒の揺らぎを入れ、機械的な周期にしない
+# GitHub と販売店に止められないよう、全店舗を 5 分ごとにチェックし、
+# 深夜 JST 2:00〜7:00 はランナーを一切使わない（ループを終え、リレーもしない）。
 
 on:
   # 朝の再開と、リレーが途切れたとき（ランナー障害など）の保険。
@@ -101,22 +98,10 @@ jobs:
           INCLUDE_BLOCKED: ${{ vars.INCLUDE_BLOCKED }}
           BUDGET_MS: ${{ vars.BUDGET_MS }}
           # チェック開始から次のチェック開始までの秒数。前回が長引いた場合は待たずに次へ進む
-          CHECK_INTERVAL_SEC: ${{ vars.CHECK_INTERVAL_SEC || '300' }}
-          # Chromium を使う店舗を何回に 1 回チェックするか（それ以外は HTTP の店舗だけ）
-          BROWSER_EVERY: ${{ vars.BROWSER_EVERY || '1' }}
-          JITTER_SEC: '15'
+          INTERVAL_SEC: '300'
           END_EPOCH: ${{ steps.window.outputs.end }}
         run: |
           set -uo pipefail
-
-          if ! printf '%s' "$CHECK_INTERVAL_SEC" | grep -qE '^[0-9]+$' || [ "$CHECK_INTERVAL_SEC" -lt 30 ]; then
-            echo "CHECK_INTERVAL_SEC は 30 以上の整数で指定してください: $CHECK_INTERVAL_SEC" >&2
-            exit 1
-          fi
-          if ! printf '%s' "$BROWSER_EVERY" | grep -qE '^[1-9][0-9]*$'; then
-            echo "BROWSER_EVERY は 1 以上の整数で指定してください: $BROWSER_EVERY" >&2
-            exit 1
-          fi
 
           end=$END_EPOCH
           n=0
@@ -124,24 +109,22 @@ jobs:
           while [ "$(date +%s)" -lt "$end" ]; do
             n=$((n + 1))
             started=$(date +%s)
-            # 1 回目は必ず全店舗。以降は BROWSER_EVERY 回に 1 回だけ Chromium の店舗を含める
-            if [ $(( (n - 1) % BROWSER_EVERY )) -eq 0 ]; then scope=""; else scope="--http-only"; fi
-            echo "::group::#$n $(date -u +%FT%TZ) ${scope:-全店舗}"
+            echo "::group::#$n $(date -u +%FT%TZ)"
             # 1 回の失敗（全店舗判定不能など）でループを止めない。
             # ステップサマリーは 1MiB 上限があるため、ループ中は書き込ませない。
-            if ! GITHUB_STEP_SUMMARY= node src/index.js $scope; then
+            if ! GITHUB_STEP_SUMMARY= node src/index.js; then
               failed=$((failed + 1))
               echo "::warning::#$n の在庫チェックが失敗しました"
             fi
             echo "::endgroup::"
 
-            wait=$(( CHECK_INTERVAL_SEC + RANDOM % (JITTER_SEC + 1) - ($(date +%s) - started) ))
+            wait=$(( INTERVAL_SEC - ($(date +%s) - started) ))
             remain=$(( end - $(date +%s) ))
             [ "$wait" -gt "$remain" ] && wait=$remain
             [ "$wait" -gt 0 ] && sleep "$wait"
           done
 
-          echo "実行 ${n} 回 / 失敗 ${failed} 回 / 間隔 ${CHECK_INTERVAL_SEC}〜$((CHECK_INTERVAL_SEC + JITTER_SEC)) 秒 / Chromium 店舗は ${BROWSER_EVERY} 回に 1 回" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "実行 ${n} 回 / 失敗 ${failed} 回" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 状態を保存
         if: always() && steps.window.outputs.active == 'true'
