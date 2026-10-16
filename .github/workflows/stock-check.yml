@@ -2,8 +2,9 @@ name: PS5 Pro 在庫チェック
 
 on:
   schedule:
-    # 10 分間隔。GitHub の schedule は混雑時に数分〜十数分遅延することがある
-    - cron: '*/10 * * * *'
+    # 5 分間隔。GitHub Actions の schedule で指定できる最短間隔（これより短い指定は 5 分に丸められる）。
+    # 混雑時は数分〜数時間遅延・間引きされることがある
+    - cron: '*/5 * * * *'
 
   # Actions タブ → このワークフロー → "Run workflow" から手動実行できる
   workflow_dispatch:

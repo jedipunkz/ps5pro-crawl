@@ -31,7 +31,7 @@ Webhook URL は Secret に入れてください。URL を知っている人は�
 
 ### 3. 有効化
 
-`.github/workflows/stock-check.yml` が 10 分間隔で動きます。
+`.github/workflows/stock-check.yml` が 5 分間隔（GitHub Actions の schedule の最短間隔）で動きます。
 
 ### 4. 通知が届くか確かめる
 
