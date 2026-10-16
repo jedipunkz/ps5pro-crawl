@@ -24,7 +24,8 @@
       "Enable JavaScript and cookies to continue",
       "アクセスを遮断しました",
       "errors\\.edgesuite\\.net",
-      "Checking your browser"
+      "Checking your browser",
+      "verify that you're not a robot"
     ],
     "deadPatterns": [
       "選択された商品は、存在しません",
@@ -231,25 +232,29 @@
     },
     {
       "id": "amazon",
-      "name": "Amazon.co.jp",
+      "name": "Amazon.co.jp (CFI-7000B01)",
       "url": "https://www.amazon.co.jp/dp/B0DGT79B1T",
       "mode": "browser",
-      "selector": "#availability, #outOfStock, #buybox",
-      "outOfStock": [
-        "在庫切れ",
-        "入荷時期は未定",
-        "お取り扱いできません",
-        "現在お取り扱いできません"
-      ],
-      "inStock": [
-        "在庫あり",
-        "残り\\d+点",
-        "一時的に在庫切れ；入荷時期は未定"
-      ],
+      "amazon": {
+        "asin": "B0DGT79B1T",
+        "postalCode": "100-0001"
+      },
       "verified": false,
-      "note": "2026-09-02 の probe 実測 (GitHub Actions IP, 6方式x3回): 全6方式で HTTP 200 だが本文 3.7KB のソフトブロック。実ページは 2MB 前後なので中身は無い。セルフホストランナーなど別回線なら取得できる可能性がある",
-      "enabled": false,
-      "disabledReason": "datacenter-blocked"
+      "enabled": true,
+      "note": "2026-10-16 実測 (米国 IP のクラウド環境, Chromium): お届け先が米国になり「この商品は選択したお届け先には発送できません」で在庫が出ない。お届け先を日本の郵便番号に変えると表示されるが、buybox は中古・マケプレ業者の「残り12点」で Amazon の在庫ではない。そのため新品の出品一覧 (AOD) で販売元 Amazon.co.jp の出品を探す。2026-09-02 の Actions probe の 3.7KB は初回のボット確認ページ（JS で自動遷移）と推定、要検証"
+    },
+    {
+      "id": "amazon-7100",
+      "name": "Amazon.co.jp (CFI-7100B01)",
+      "url": "https://www.amazon.co.jp/dp/B0G4RR4DM7",
+      "mode": "browser",
+      "amazon": {
+        "asin": "B0G4RR4DM7",
+        "postalCode": "100-0001"
+      },
+      "verified": false,
+      "enabled": true,
+      "note": "2026-10-16 実測: 新品はマケプレ業者 3 件 (¥226,800〜) のみで Amazon.co.jp 販売なし。判定方法は amazon (CFI-7000B01) と同じ"
     },
     {
       "id": "biccamera",

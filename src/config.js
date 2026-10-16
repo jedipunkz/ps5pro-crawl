@@ -29,6 +29,16 @@ export async function loadConfig(path) {
     if (t.mode && !['http', 'browser'].includes(t.mode)) {
       throw new Error(`${path}: ${t.id} の mode が不正です: ${t.mode}`);
     }
+    if (t.amazon) {
+      // お届け先の設定に JS が要るため、http モードでは動かない
+      if (t.mode !== 'browser') throw new Error(`${path}: ${t.id} は amazon 指定なので mode は browser にしてください`);
+      if (!/^[A-Z0-9]{10}$/.test(t.amazon.asin ?? '')) {
+        throw new Error(`${path}: ${t.id} の amazon.asin が不正です: ${t.amazon.asin}`);
+      }
+      if (!/^\d{3}-\d{4}$/.test(t.amazon.postalCode ?? '')) {
+        throw new Error(`${path}: ${t.id} の amazon.postalCode は 123-4567 形式で指定してください`);
+      }
+    }
     return {
       mode: 'http',
       selector: null,
@@ -42,6 +52,7 @@ export async function loadConfig(path) {
       waitForSelector: null,
       settleMs: null,
       disableHttp2: false,
+      amazon: null,
       ...t,
       timeoutMs: t.timeoutMs ?? defaults.timeoutMs,
       retries: t.retries ?? defaults.retries,

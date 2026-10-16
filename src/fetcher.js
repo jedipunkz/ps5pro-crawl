@@ -1,3 +1,5 @@
+import { prepareAmazon, aodUrl } from './amazon.js';
+
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -81,9 +83,18 @@ export class BrowserPool {
   // 起動オプションが違うものは別プロセスになるので、キーごとに保持する
   #pools = new Map();
 
-  async #ensure(key, { disableHttp2 }) {
-    if (this.#pools.has(key)) return this.#pools.get(key).context;
+  // 起動中の Promise ごと保持する。並列の初回呼び出しが同時に来ると
+  // ブラウザが 2 つ起動し、Map から外れた側が close されずプロセスが終了しなくなるため
+  async #ensure(key, opts) {
+    if (!this.#pools.has(key)) {
+      const launching = this.#launch(opts);
+      launching.catch(() => this.#pools.delete(key));
+      this.#pools.set(key, launching);
+    }
+    return (await this.#pools.get(key)).context;
+  }
 
+  async #launch({ disableHttp2 }) {
     const { chromium } = await import('playwright');
     const args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled'];
     // 一部サイトは HTTP/2 で応答が壊れる (ERR_HTTP2_PROTOCOL_ERROR)
@@ -109,15 +120,19 @@ export class BrowserPool {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
 
-    this.#pools.set(key, { browser, context });
-    return context;
+    return { browser, context };
   }
 
   async fetch(target) {
     const key = target.disableHttp2 ? 'no-http2' : 'default';
     const ctx = await this.#ensure(key, { disableHttp2: !!target.disableHttp2 });
+    // Amazon は商品ページではなく新品の出品一覧を見る。通知のリンクは target.url のまま
+    const url = target.amazon ? aodUrl(target.amazon.asin) : target.url;
     return withRetry(
       async () => {
+        if (target.amazon) {
+          await prepareAmazon(ctx, { postalCode: target.amazon.postalCode, timeoutMs: target.timeoutMs });
+        }
         const page = await ctx.newPage();
         // 画像・フォント・動画は在庫判定に不要なので落として転送量と時間を削る
         await page.route('**/*', (route) => {
@@ -134,12 +149,12 @@ export class BrowserPool {
               .catch(() => {});
             await page.waitForTimeout(2000);
           }
-          const res = await page.goto(target.url, {
+          const res = await page.goto(url, {
             waitUntil: 'domcontentloaded',
             timeout: target.timeoutMs,
           });
           const status = res?.status() ?? 0;
-          if (status >= 400) throw new HttpError(status, target.url, await page.content().catch(() => null));
+          if (status >= 400) throw new HttpError(status, url, await page.content().catch(() => null));
           if (target.waitForSelector) {
             await page
               .waitForSelector(target.waitForSelector, { timeout: 8000 })
@@ -158,7 +173,10 @@ export class BrowserPool {
   }
 
   async close() {
-    for (const { browser, context } of this.#pools.values()) {
+    for (const launching of this.#pools.values()) {
+      const pool = await launching.catch(() => null);
+      if (!pool) continue;
+      const { browser, context } = pool;
       await context.close().catch(() => {});
       await browser.close().catch(() => {});
     }

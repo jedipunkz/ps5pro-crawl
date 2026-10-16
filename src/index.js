@@ -124,18 +124,19 @@ async function checkTarget(target, browser, dumpDir, deadline) {
   }
   try {
     const { html, status } = target.mode === 'browser' ? await browser.fetch(target) : await fetchHttp(target);
-    const { status: stockStatus, reason, text } = detect(target, html);
+    const { status: stockStatus, reason, text, price } = detect(target, html);
     await dump(dumpDir, target, {
       html,
       text,
-      note: `url: ${target.url}\nmode: ${target.mode}\nhttp: ${status}\nselector: ${target.selector ?? '(なし)'}\n判定: ${stockStatus} — ${reason}\n`,
+      note: `url: ${target.url}\nmode: ${target.mode}${target.amazon ? ` (amazon ${target.amazon.asin})` : ''}\nhttp: ${status}\nselector: ${target.selector ?? '(なし)'}\n判定: ${stockStatus} — ${reason}\n`,
     });
     return {
       ...base,
       status: stockStatus,
       reason,
       httpStatus: status,
-      price: text.match(PRICE_RE)?.[0] ?? null,
+      // 判定側が価格を決めたらそれを使う。Amazon の在庫なしで他出品者の価格を拾わないため
+      price: price !== undefined ? price : (text.match(PRICE_RE)?.[0] ?? null),
     };
   } catch (err) {
     // 403 の応答本文には遮断の理由（WAF 名や Reference ID）が入っていることが多い

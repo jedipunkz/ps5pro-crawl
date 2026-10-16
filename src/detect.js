@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import { IN_STOCK, OUT_OF_STOCK, UNKNOWN, LINK_DEAD } from './status.js';
+import { detectAmazon } from './amazon.js';
 
 /** HTML からテキストを取り出す。selector 指定時は判定範囲を絞った文字列も返す */
 export function extractText(html, selector) {
@@ -54,6 +55,10 @@ export function detect(target, html) {
   if (dead) {
     return { status: LINK_DEAD, reason: `商品ページが存在しません (「${dead}」)`, text: body, scoped };
   }
+
+  // Amazon は文言ではなく出品者で判定する。buybox の「残り12点」は
+  // 中古やマケプレ業者のことがあり、文言一致では Amazon の在庫と区別できない
+  if (target.amazon) return { ...detectAmazon(html), scoped: true };
 
   if (body.length < target.minTextLength) {
     return {
