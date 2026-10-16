@@ -26,7 +26,8 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** で
 | Variable | `ERROR_THRESHOLD` | | 連続失敗の通知しきい値（既定 `3`） |
 | Variable | `INCLUDE_BLOCKED` | | `true` で回線起因で無効にした店舗を戻す（セルフホストランナー向け） |
 | Variable | `BUDGET_MS` | | 全体の時間予算 ms（既定 `300000`） |
-| Variable | `CHECK_INTERVAL_SEC` | | 常駐監視のチェック間隔 秒（既定 `60`、下限 `30`） |
+| Variable | `CHECK_INTERVAL_SEC` | | 常駐監視のチェック間隔 秒（既定 `60`、下限 `30`。実際は 0〜15 秒の揺らぎが加わる） |
+| Variable | `BROWSER_EVERY` | | Chromium を使う店舗（Amazon / エディオン）を何回に 1 回チェックするか（既定 `3`） |
 
 Webhook URL は Secret に入れてください。URL を知っている人は誰でもそのチャンネルに投稿できます。
 
@@ -36,7 +37,10 @@ Webhook URL は Secret に入れてください。URL を知っている人は�
 
 - 1 ジョブ内でチェックをループし、330 分経ったら自分自身を `workflow_dispatch` で起動し直してリレーします。
   GitHub の `schedule` は混雑時に数時間間引かれるため、cron だけでは数分間隔の監視ができません。
+- 深夜 JST 2:00〜7:00 はランナーを使いません。2:00 でループを終えてリレーせず、朝 7:17 以降の `schedule` で再開します。
 - リレーが途切れたときは毎時 17 分の `schedule` が再開させます（これも間引かれうるので、再開まで数時間かかることがあります）。
+- HTTP の店舗（ソニーストア / 楽天ブックス）は毎回、Chromium の店舗（Amazon / エディオン）は `BROWSER_EVERY` 回に 1 回チェックします。
+  ランナーの CPU 負荷と、データセンター IP を遮断しやすい店舗へのアクセス数を抑えるためです。
 - **public リポジトリ専用です。** Actions の分数を 24 時間消費するため、private では無料枠（月 2,000〜3,000 分）を数日で使い切ります。
 - 初回は Actions タブ → 「PS5 Pro 在庫監視（常駐）」→ 「Run workflow」で起動してください。
 - 止めるときは同じ画面の「…」→ 「Disable workflow」。キャンセルだけだと毎時の `schedule` で再開します。
