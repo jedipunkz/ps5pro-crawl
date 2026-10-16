@@ -1,3 +1,5 @@
+import { prepareAmazon, aodUrl } from './amazon.js';
+
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -124,8 +126,13 @@ export class BrowserPool {
   async fetch(target) {
     const key = target.disableHttp2 ? 'no-http2' : 'default';
     const ctx = await this.#ensure(key, { disableHttp2: !!target.disableHttp2 });
+    // Amazon は商品ページではなく新品の出品一覧を見る。通知のリンクは target.url のまま
+    const url = target.amazon ? aodUrl(target.amazon.asin) : target.url;
     return withRetry(
       async () => {
+        if (target.amazon) {
+          await prepareAmazon(ctx, { postalCode: target.amazon.postalCode, timeoutMs: target.timeoutMs });
+        }
         const page = await ctx.newPage();
         // 画像・フォント・動画は在庫判定に不要なので落として転送量と時間を削る
         await page.route('**/*', (route) => {
@@ -142,12 +149,12 @@ export class BrowserPool {
               .catch(() => {});
             await page.waitForTimeout(2000);
           }
-          const res = await page.goto(target.url, {
+          const res = await page.goto(url, {
             waitUntil: 'domcontentloaded',
             timeout: target.timeoutMs,
           });
           const status = res?.status() ?? 0;
-          if (status >= 400) throw new HttpError(status, target.url, await page.content().catch(() => null));
+          if (status >= 400) throw new HttpError(status, url, await page.content().catch(() => null));
           if (target.waitForSelector) {
             await page
               .waitForSelector(target.waitForSelector, { timeout: 8000 })
