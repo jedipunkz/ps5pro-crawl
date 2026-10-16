@@ -81,9 +81,18 @@ export class BrowserPool {
   // 起動オプションが違うものは別プロセスになるので、キーごとに保持する
   #pools = new Map();
 
-  async #ensure(key, { disableHttp2 }) {
-    if (this.#pools.has(key)) return this.#pools.get(key).context;
+  // 起動中の Promise ごと保持する。並列の初回呼び出しが同時に来ると
+  // ブラウザが 2 つ起動し、Map から外れた側が close されずプロセスが終了しなくなるため
+  async #ensure(key, opts) {
+    if (!this.#pools.has(key)) {
+      const launching = this.#launch(opts);
+      launching.catch(() => this.#pools.delete(key));
+      this.#pools.set(key, launching);
+    }
+    return (await this.#pools.get(key)).context;
+  }
 
+  async #launch({ disableHttp2 }) {
     const { chromium } = await import('playwright');
     const args = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled'];
     // 一部サイトは HTTP/2 で応答が壊れる (ERR_HTTP2_PROTOCOL_ERROR)
@@ -109,8 +118,7 @@ export class BrowserPool {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
 
-    this.#pools.set(key, { browser, context });
-    return context;
+    return { browser, context };
   }
 
   async fetch(target) {
@@ -158,7 +166,10 @@ export class BrowserPool {
   }
 
   async close() {
-    for (const { browser, context } of this.#pools.values()) {
+    for (const launching of this.#pools.values()) {
+      const pool = await launching.catch(() => null);
+      if (!pool) continue;
+      const { browser, context } = pool;
       await context.close().catch(() => {});
       await browser.close().catch(() => {});
     }
