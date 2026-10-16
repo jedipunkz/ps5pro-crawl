@@ -26,12 +26,21 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** で
 | Variable | `ERROR_THRESHOLD` | | 連続失敗の通知しきい値（既定 `3`） |
 | Variable | `INCLUDE_BLOCKED` | | `true` で回線起因で無効にした店舗を戻す（セルフホストランナー向け） |
 | Variable | `BUDGET_MS` | | 全体の時間予算 ms（既定 `300000`） |
+| Variable | `CHECK_INTERVAL_SEC` | | 常駐監視のチェック間隔 秒（既定 `60`、下限 `30`） |
 
 Webhook URL は Secret に入れてください。URL を知っている人は誰でもそのチャンネルに投稿できます。
 
 ### 3. 有効化
 
-`.github/workflows/stock-check.yml` が 5 分間隔（GitHub Actions の schedule の最短間隔）で動きます。
+`.github/workflows/stock-monitor.yml` が常駐して `CHECK_INTERVAL_SEC`（既定 60 秒）ごとにチェックします。
+
+- 1 ジョブ内でチェックをループし、330 分経ったら自分自身を `workflow_dispatch` で起動し直してリレーします。
+  GitHub の `schedule` は混雑時に数時間間引かれるため、cron だけでは数分間隔の監視ができません。
+- リレーが途切れたときは毎時 17 分の `schedule` が再開させます（これも間引かれうるので、再開まで数時間かかることがあります）。
+- **public リポジトリ専用です。** Actions の分数を 24 時間消費するため、private では無料枠（月 2,000〜3,000 分）を数日で使い切ります。
+- 初回は Actions タブ → 「PS5 Pro 在庫監視（常駐）」→ 「Run workflow」で起動してください。
+- 止めるときは同じ画面の「…」→ 「Disable workflow」。キャンセルだけだと毎時の `schedule` で再開します。
+- `.github/workflows/stock-check.yml` は手動実行（dry-run / diagnose など）専用です。
 
 ### 4. 通知が届くか確かめる
 
@@ -317,7 +326,7 @@ WAF の文言は `<title>` や `<noscript>` にしか無いことがあるため
 
 ## 運用上の注意
 
-- **cron の間隔**: GitHub の `schedule` は混雑時に数分〜十数分遅延します。実行間隔は保証されません。
+- **cron の間隔**: GitHub の `schedule` は混雑時に数時間遅延・間引きされます（実測で 2〜5 時間おき）。そのため常駐ループ方式にしています。
   人気商品の再販は数分で売り切れるため、このアプリは**確実に買うための手段ではなく、
   再販に気づくための手段**として使ってください。
 - **アクセス頻度**: 並列数は既定 3、リトライは指数バックオフです。

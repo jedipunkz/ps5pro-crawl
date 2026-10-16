@@ -1,0 +1,110 @@
+name: PS5 Pro 在庫監視（常駐）
+
+# GitHub の schedule は混雑時に数時間間引かれるため、cron だけでは数分間隔の監視が成り立たない。
+# そこで 1 ジョブの中で在庫チェックをループさせ、ジョブの制限時間 (6h) に達する前に
+# 自分自身を workflow_dispatch で起動し直してリレーする。
+# Actions の分数を常時消費するので public リポジトリ（標準ランナー無料）でのみ使うこと。
+
+on:
+  # リレーが途切れたとき（ランナー障害・手動キャンセルなど）に再開させるための保険。
+  # 監視中はこの起動は concurrency で待たされ、次のリレーと競合した側がキャンセルされる。
+  schedule:
+    - cron: '17 * * * *'
+
+  # 初回起動とリレー用。Actions タブから手動でも起動できる
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write # 自分自身を workflow_dispatch で起動し直すため
+
+concurrency:
+  # 監視ループは常に 1 本だけ。手動の stock-check.yml とはグループを分け、
+  # 手動実行が 6 時間待たされないようにしている。
+  group: ps5pro-stock-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    # ジョブの上限は 360 分。ループ (LOOP_MINUTES) の後に状態保存とリレーの時間を残す
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Chromium をインストール
+        run: npx playwright install --with-deps chromium
+
+      - name: 前回の状態を復元
+        uses: actions/cache/restore@v4
+        with:
+          path: .state
+          key: ps5pro-state-${{ github.run_id }}
+          restore-keys: |
+            ps5pro-state-
+
+      - name: 在庫チェックをループ実行
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_MENTION: ${{ vars.DISCORD_MENTION }}
+          NOTIFY_ON_ERROR: ${{ vars.NOTIFY_ON_ERROR }}
+          NOTIFY_ON_SOLD_OUT: ${{ vars.NOTIFY_ON_SOLD_OUT }}
+          ERROR_THRESHOLD: ${{ vars.ERROR_THRESHOLD }}
+          INCLUDE_BLOCKED: ${{ vars.INCLUDE_BLOCKED }}
+          BUDGET_MS: ${{ vars.BUDGET_MS }}
+          # チェック開始から次のチェック開始までの秒数。前回が長引いた場合は待たずに次へ進む
+          CHECK_INTERVAL_SEC: ${{ vars.CHECK_INTERVAL_SEC || '60' }}
+          LOOP_MINUTES: '330'
+        run: |
+          set -uo pipefail
+
+          if ! printf '%s' "$CHECK_INTERVAL_SEC" | grep -qE '^[0-9]+$' || [ "$CHECK_INTERVAL_SEC" -lt 30 ]; then
+            echo "CHECK_INTERVAL_SEC は 30 以上の整数で指定してください: $CHECK_INTERVAL_SEC" >&2
+            exit 1
+          fi
+
+          end=$(( $(date +%s) + LOOP_MINUTES * 60 ))
+          n=0
+          failed=0
+          while [ "$(date +%s)" -lt "$end" ]; do
+            n=$((n + 1))
+            started=$(date +%s)
+            echo "::group::#$n $(date -u +%FT%TZ)"
+            # 1 回の失敗（全店舗判定不能など）でループを止めない。
+            # ステップサマリーは 1MiB 上限があるため、ループ中は書き込ませない。
+            if ! GITHUB_STEP_SUMMARY= node src/index.js; then
+              failed=$((failed + 1))
+              echo "::warning::#$n の在庫チェックが失敗しました"
+            fi
+            echo "::endgroup::"
+
+            wait=$(( CHECK_INTERVAL_SEC - ($(date +%s) - started) ))
+            remain=$(( end - $(date +%s) ))
+            [ "$wait" -gt "$remain" ] && wait=$remain
+            [ "$wait" -gt 0 ] && sleep "$wait"
+          done
+
+          echo "実行 ${n} 回 / 失敗 ${failed} 回 / 間隔 ${CHECK_INTERVAL_SEC} 秒" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 状態を保存
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .state
+          key: ps5pro-state-${{ github.run_id }}
+
+      # 正常にループを終えたときだけ次のジョブにリレーする。
+      # 失敗・キャンセル時は毎時の schedule が再開させる。
+      # 監視を完全に止めるには Actions タブでこのワークフローを Disable にする。
+      - name: 次の監視ジョブを起動
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run stock-monitor.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"
