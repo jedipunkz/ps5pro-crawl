@@ -5,7 +5,7 @@ const EMPTY = { version: 1, updatedAt: null, targets: {} };
 
 /**
  * 前回結果。これが無いと毎回「在庫あり」を通知してしまうため、
- * Actions では cache で持ち回す。失われても壊れず、重複通知が 1 回出るだけ。
+ * .state/ に保存して持ち回す。失われても壊れず、重複通知が 1 回出るだけ。
  */
 export async function loadState(path) {
   try {
